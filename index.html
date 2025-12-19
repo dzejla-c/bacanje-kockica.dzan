@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+  <meta charset="UTF-8">
+  <title>Bacanje dvije kockice – simulacija</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: linear-gradient(135deg, #eef2f3, #d9e2ec); margin:0; padding:20px; }
+    h1 { text-align:center; color:#2c3e50; }
+    .container { max-width:1200px; margin:auto; background:white; padding:20px; border-radius:12px; box-shadow:0 4px 10px rgba(0,0,0,0.1); }
+    .dice-container { text-align:center; margin-bottom:20px; }
+    .dice { width:80px; height:80px; line-height:80px; font-size:40px; display:inline-block; margin:10px; border:3px solid #333; border-radius:10px; background:#fafafa; box-shadow: inset 0 0 5px rgba(0,0,0,0.2); transition: transform 0.2s; }
+    .buttons { text-align:center; margin-bottom:20px; }
+    button { padding:10px 18px; font-size:15px; margin:5px; border:none; border-radius:6px; cursor:pointer; background:#3498db; color:white; }
+    button:hover { background:#2980b9; }
+    table { border-collapse:collapse; width:100%; margin-top:20px; }
+    th, td { border:1px solid #ccc; padding:6px; text-align:center; font-size:14px; }
+    th { background:#ecf0f1; }
+    #stats { margin-top:20px; background:#f7f9fb; padding:15px; border-radius:8px; }
+    canvas { margin-top:30px; max-width:100%; height:400px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Eksperiment: Bacanje dvije kockice</h1>
+  <div class="dice-container">
+    <div id="dice1" class="dice">⚀</div>
+    <div id="dice2" class="dice">⚀</div>
+  </div>
+  <div class="buttons">
+    <button onclick="rollDice()">Baci kockice</button>
+    <button onclick="autoRoll(100)">Automatski 100 bacanja</button>
+    <button onclick="autoRoll(1000)">Automatski 1000 bacanja</button>
+    <button onclick="resetExperiment()">Resetuj</button>
+  </div>
+  <table id="resultsTable">
+    <thead>
+      <tr><th>#</th><th>Kockica 1</th><th>Kockica 2</th><th>Zbir</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div id="stats"></div>
+  <canvas id="histogram"></canvas>
+  <canvas id="frequencyPolygon"></canvas>
+  <canvas id="barChart"></canvas>
+  <canvas id="lineChart"></canvas>
+  <canvas id="pieChart"></canvas>
+</div>
+<script>
+let rolls = [];
+let charts = {};
+const diceSymbols = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+
+function rollDice() {
+  let d1 = Math.floor(Math.random()*6)+1;
+  let d2 = Math.floor(Math.random()*6)+1;
+  const dice1El = document.getElementById('dice1');
+  const dice2El = document.getElementById('dice2');
+  dice1El.style.transform = 'rotate(360deg)';
+  dice2El.style.transform = 'rotate(360deg)';
+  setTimeout(()=>{
+    dice1El.textContent = diceSymbols[d1-1];
+    dice2El.textContent = diceSymbols[d2-1];
+    dice1El.style.transform = 'rotate(0deg)';
+    dice2El.style.transform = 'rotate(0deg)';
+  },150);
+  let sum = d1 + d2;
+  rolls.push(sum);
+  addRow(d1,d2,sum);
+  calculateStats();
+  drawCharts();
+}
+
+function autoRoll(n){
+  for(let i=0;i<n;i++){
+    let d1=Math.floor(Math.random()*6)+1;
+    let d2=Math.floor(Math.random()*6)+1;
+    rolls.push(d1+d2);
+    addRow(d1,d2,d1+d2);
+  }
+  calculateStats();
+  drawCharts();
+}
+
+function resetExperiment(){
+  rolls=[];
+  document.querySelector('#resultsTable tbody').innerHTML='';
+  document.getElementById('stats').innerHTML='';
+  for(let key in charts){ if(charts[key]) charts[key].destroy(); }
+  charts = {};
+}
+
+function addRow(d1,d2,sum){
+  const tbody=document.querySelector('#resultsTable tbody');
+  const row=tbody.insertRow();
+  row.insertCell(0).textContent=rolls.length;
+  row.insertCell(1).textContent=d1;
+  row.insertCell(2).textContent=d2;
+  row.insertCell(3).textContent=sum;
+}
+
+function calculateStats(){
+  const n=rolls.length;
+  if(n===0) return;
+  const mean=rolls.reduce((a,b)=>a+b,0)/n;
+  const sorted=[...rolls].sort((a,b)=>a-b);
+  const median=n%2===0?(sorted[n/2-1]+sorted[n/2])/2:sorted[Math.floor(n/2)];
+  const freq={}; rolls.forEach(x=>freq[x]=(freq[x]||0)+1);
+  const mode=Object.keys(freq).reduce((a,b)=>freq[a]>freq[b]?a:b);
+  const variance=rolls.reduce((a,b)=>a+Math.pow(b-mean,2),0)/n;
+  const std=Math.sqrt(variance);
+  const gt8=rolls.filter(x=>x>8).length;
+  document.getElementById('stats').innerHTML=`<h3>Statistička obrada</h3><p>Broj bacanja: ${n}</p><p>Aritmetička sredina: ${mean.toFixed(2)}</p><p>Medijana: ${median}</p><p>Moda: ${mode}</p><p>Varijansa: ${variance.toFixed(2)}</p><p>Standardna devijacija: ${std.toFixed(2)}</p><p>Eksperimentalna vjerovatnoća (zbir > 8): ${(gt8/n*100).toFixed(2)}%</p>`;
+}
+
+function drawCharts(){
+  const counts=Array(13).fill(0); rolls.forEach(x=>counts[x]++);
+  const labels=[2,3,4,5,6,7,8,9,10,11,12];
+  const gt8=rolls.filter(x=>x>8).length;
+  const le8=rolls.length-gt8;
+
+  // Histogram
+  if(charts.histogram) charts.histogram.destroy();
+  charts.histogram = new Chart(document.getElementById('histogram'),{
+    type:'bar', data:{labels,datasets:[{label:'Frekvencija zbirova', data:counts.slice(2)}]},
+    options:{responsive:true, plugins:{title:{display:true,text:'Histogram zbirova'}, legend:{display:true, position:'top'}}, scales:{x:{title:{display:true,text:'Zbir kockica'}}, y:{title:{display:true,text:'Frekvencija'}, beginAtZero:true}}}
+  });
+
+  // Poligon frekvencija
+  if(charts.frequencyPolygon) charts.frequencyPolygon.destroy();
+  charts.frequencyPolygon = new Chart(document.getElementById('frequencyPolygon'),{
+    type:'line', data:{labels,datasets:[{label:'Poligon frekvencija', data:counts.slice(2), borderColor:'blue', fill:false, tension:0.2}]},
+    options:{responsive:true, plugins:{title:{display:true,text:'Poligon frekvencija'}, legend:{display:true, position:'top'}}, scales:{x:{title:{display:true,text:'Zbir kockica'}}, y:{title:{display:true,text:'Frekvencija'}, beginAtZero:true}}}
+  });
+
+  // Stubičasti grafikon za zbir >8
+  if(charts.barChart) charts.barChart.destroy();
+  charts.barChart = new Chart(document.getElementById('barChart'),{
+    type:'bar', data:{labels:['Zbir > 8','Zbir ≤ 8'], datasets:[{label:'Broj ishoda', data:[gt8,le8], backgroundColor:['#2ecc71','#e74c3c']}]},
+    options:{responsive:true, plugins:{title:{display:true,text:'Broj ishoda >8 vs ≤8'}, legend:{display:true, position:'top'}}}
+  });
+
+  // Linearni grafikon (popravljena verzija)
+  if(charts.lineChart) charts.lineChart.destroy();
+  let cumulative = [];
+  let sum=0;
+  for(let i=0;i<rolls.length;i++){
+    sum += (rolls[i]>8?1:0);
+    cumulative.push(sum/(i+1));
+  }
+  charts.lineChart = new Chart(document.getElementById('lineChart'),{
+    type:'line', data:{labels:[...Array(rolls.length).keys()].map(i=>i+1), datasets:[{label:'Eksperimentalna vjerovatnoća zbir>8', data:cumulative, borderColor:'purple', fill:false, tension:0.1}]},
+    options:{responsive:true, plugins:{title:{display:true,text:'Linearni grafikon: Vjerovatnoća zbir>8'}, legend:{display:true, position:'top'}} , scales:{x:{title:{display:true,text:'Broj bacanja'}}, y:{title:{display:true,text:'Eksperimentalna vjerovatnoća'}, min:0, max:1}}}
+  });
+
+  // Pie chart
+  if(charts.pieChart) charts.pieChart.destroy();
+  charts.pieChart = new Chart(document.getElementById('pieChart'),{
+    type:'pie', data:{labels:['Zbir > 8','Zbir ≤ 8'], datasets:[{data:[gt8,le8], backgroundColor:['#f1c40f','#3498db']}]},
+    options:{responsive:true, plugins:{title:{display:true,text:'Pie chart raspodjela ishoda'}, legend:{display:true, position:'bottom'}}}
+  });
+}
+</script>
+</body>
+</html>
